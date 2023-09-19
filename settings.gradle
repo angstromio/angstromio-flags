@@ -14,18 +14,18 @@ rootProject.name = 'angstromio-flags'
 include 'flags-lib'
 
 // for Local
-if (file('../angstromio-cli').exists() && !hasProperty('publishing')) {
-    includeBuild('../angstromio-cli') {
+if (file('../angstromio-util').exists() && !hasProperty('publishing')) {
+    includeBuild('../angstromio-util') {
         dependencySubstitution {
-            substitute module('io.angstrom:angstromio-cli') using project(':cli-lib')
+            substitute module('io.angstrom:angstromio-util') using project(':util-lib')
         }
     }
 }
 // for GitHub Actions
-if (file('angstromio-cli').exists() && !hasProperty('publishing')) {
-    includeBuild('angstromio-cli') {
+if (file('angstromio-util').exists() && !hasProperty('publishing')) {
+    includeBuild('angstromio-util') {
         dependencySubstitution {
-            substitute module('io.angstrom:angstromio-cli') using project(':cli-lib')
+            substitute module('io.angstrom:angstromio-util') using project(':util-lib')
         }
     }
 }
