@@ -46,6 +46,56 @@ class FlagsTest : FunSpec() {
             }
         }
 
+        test("Flag#let multi value") {
+            val flags = Flags("flag-let")
+            val argType = FlagType.List(valueType = FlagType.Int)
+            val expected = listOf(1, 3, 5, 7, 9, 11, 13)
+
+            val flag = flags.required(
+                name = "ints",
+                description = "List of integers",
+                flagType = argType
+            )
+
+            flag.name should be("ints")
+            flag.description should be("List of integers")
+            flag.value() should beNull()
+            flags.parse(arrayOf("-ints", "1,3,5,7,9,11,13"))
+            flag.value() shouldNot beNull()
+            flag.value() should be(expected)
+
+            val letValue = listOf(2, 4, 6, 8, 10, 12, 14)
+            flag.let(letValue) {
+                flag.value() should be(letValue)
+            }
+            flag.value() should be(expected)
+        }
+
+        test("Flag#let single value") {
+            val flags = Flags("flag-let")
+            val argType = FlagType.Int
+            val expected = 42
+
+            val flag = flags.required(
+                name = "int",
+                description = "What is the answer?",
+                flagType = argType
+            )
+
+            flag.name should be("int")
+            flag.description should be("What is the answer?")
+            flag.value() should beNull()
+            flags.parse(arrayOf("-int", "42"))
+            flag.value() shouldNot beNull()
+            flag.value() should be(expected)
+
+            val letValue = 101
+            flag.let(letValue) {
+                flag.value() should be(letValue)
+            }
+            flag.value() should be(expected)
+        }
+
         test("Flags#required") {
             val flags = Flags("test")
 
@@ -101,23 +151,29 @@ class FlagsTest : FunSpec() {
                 argType = FlagType.Boolean,
                 default = false
             )
+            useShortFormOption.hasDefault should be(true)
             val rendersOption = flags.optional(
                 name = "renders",
                 description = "Renders for showing information",
                 flagType = FlagType.Choice<Renders>(),
                 default = listOf(Renders.TEXT)
             )
+            rendersOption.hasDefault should be(true)
             val sourcesOption = flags.optional(
                 name = "sources",
                 description = "Data sources",
                 flagType = FlagType.Choice<TestEnum>(),
                 default = listOf(TestEnum.PRODUCTION)
             )
+            sourcesOption.hasDefault should be(true)
             val outputOption = flags.required(
                 name = "output",
                 description = "Output file",
                 flagType = FlagType.String
             )
+            outputOption.hasDefault should be(false)
+
+            // parse flags
             flags.parse(arrayOf("-output", "out.txt"))
 
             useShortFormOption.value() should be(false)
@@ -130,6 +186,22 @@ class FlagsTest : FunSpec() {
             useShortFormOption.flagValue.valueOrigin should be(FlagParser.ValueOrigin.SET_DEFAULT_VALUE)
             rendersOption.flagValue.valueOrigin should be(FlagParser.ValueOrigin.SET_DEFAULT_VALUE)
             sourcesOption.flagValue.valueOrigin should be(FlagParser.ValueOrigin.SET_DEFAULT_VALUE)
+        }
+
+        test("Flags#boolean without argument") {
+            val flags = Flags("test")
+            val debugMode = flags.optional(name = "debug", description = "Debug mode", FlagType.Boolean, default = false)
+            flags.parse(arrayOf("-debug"))
+
+            debugMode.value() should be(true)
+        }
+
+        test("Flags#boolean with argument") {
+            val flags = Flags("test", allowUndefinedFlags = true)
+            val debugMode = flags.optional(name = "debug", description = "Debug mode", FlagType.String, default = "false")
+            flags.parse(arrayOf("-debug", "true"))
+
+            debugMode.value().toBoolean() should be(true)
         }
 
         test("Flags#multiple arguments") {
@@ -182,6 +254,41 @@ class FlagsTest : FunSpec() {
             addendums.value() should be (listOf(2, 3))
             debugMode.value() should be(true)
             output.value() should be("out.txt")
+        }
+
+        test("Flags#allow undefined flags without sending undefined") {
+            val flags = Flags("test", allowUndefinedFlags = true)
+            val addendums = flags.required(name = "addendums", description = "Addendums", FlagType.List(FlagType.Int))
+            val debugMode = flags.required(name = "debug", description = "Debug mode", FlagType.Boolean)
+            val output = flags.required(name = "output", description= "Output file", FlagType.String)
+
+            flags.parse(arrayOf("-addendums", "2,3", "-debug", "-output", "out.txt"))
+
+            addendums.value() should be (listOf(2, 3))
+            debugMode.value() should be(true)
+            output.value() should be("out.txt")
+        }
+
+        test("Flags#help") {
+            val flags = Flags("test")
+            flags.required(
+                name = "debug",
+                description = "Debug mode",
+                flagType = FlagType.Boolean
+            )
+            flags.optional(
+                name = "sources",
+                description = "Data sources",
+                flagType = FlagType.Choice<TestEnum>(),
+                default = listOf(TestEnum.PRODUCTION)
+            )
+
+            val e = assertThrows<ParsingException> {
+                flags.parse(arrayOf("-help"))
+            }
+            e.message?.contains("-debug -> Debug mode (always required)") should be(true)
+            e.message?.contains("-sources [production] -> Data sources { Value should be one of [local, staging, production] }")
+            e.message?.contains("-help -> Usage info") should be(true)
         }
     }
 }

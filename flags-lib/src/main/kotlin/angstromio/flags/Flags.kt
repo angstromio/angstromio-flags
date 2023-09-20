@@ -11,34 +11,18 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * A simple flags implementation. We support only two formats:
+ * A simple flags (JVM command line input) implementation. We support only two formats:
  *
  *    for flags with optional values (e.g. booleans):
  *      -flag, -flag value
  *    for flags with required values:
  *      -flag value
- *
- * That's it. These can be parsed without ambiguity.
- *
- * There is no support for mandatory arguments: That is not what
- * flags are for.
  */
 class Flags private constructor(
     private val name: String = this::class.java.name,
-    private val allowUndefinedFlags: Boolean = ALLOW_UNDEFINED_FLAGS
+    private val allowUndefinedFlags: Boolean = ALLOW_UNDEFINED_FLAGS,
+    private val includeGlobalFlags: Boolean = INCLUDE_GLOBAL_FLAGS
 ) {
-
-    companion object {
-        private const val ALLOW_UNDEFINED_FLAGS: Boolean = false
-
-        operator fun invoke(name: String): Flags = Flags(name)
-
-        operator fun invoke(name: String, allowUndefinedFlags: Boolean) =
-            Flags(name, allowUndefinedFlags)
-    }
-
-    private val _parser: AtomicReference<FlagParser> = AtomicReference(newFlagParser())
-    private val _flags: ConcurrentHashMap<String, Flag<*, *>> = ConcurrentHashMap()
 
     sealed interface FlagParseResult {
         /**
@@ -58,37 +42,21 @@ class Flags private constructor(
         }
     }
 
-    fun parseResult(args: Array<String>): FlagParseResult {
-        synchronized(lock = this) {
-            val parseResult = when (val result = _parser.get().parse(args)) {
-                is FlagParserResult.OK -> {
-                    _flags.forEach { (_, value) ->
-                        value.register()
-                    }
-                    FlagParseResult.Ok(emptyList())
-                }
+    companion object {
+        private const val ALLOW_UNDEFINED_FLAGS: Boolean = false
+        private const val INCLUDE_GLOBAL_FLAGS: Boolean = true
 
-                is FlagParserResult.Error -> {
-                    FlagParseResult.Error(result.reason)
-                }
+        operator fun invoke(name: String): Flags = Flags(name)
 
-                is FlagParserResult.Help -> {
-                    System.err.println(result.usage)
-                    FlagParseResult.Ok(emptyList())
-                }
-            }
+        operator fun invoke(name: String, allowUndefinedFlags: Boolean) =
+            Flags(name, allowUndefinedFlags)
 
-            return parseResult
-        }
+        operator fun invoke(name: String, allowUndefinedFlags: Boolean, includeGlobalFlags: Boolean) =
+            Flags(name, allowUndefinedFlags, includeGlobalFlags)
     }
 
-    fun parse(args: Array<String>) {
-        return when (val result = parseResult(args)) {
-            is FlagParseResult.Ok -> Unit
-            is FlagParseResult.Error ->
-                throw ParsingException(result.reason ?: "")
-        }
-    }
+    private val parser: AtomicReference<FlagParser> = AtomicReference(newFlagParser())
+    private val flags: ConcurrentHashMap<String, Flag<*, *>> = ConcurrentHashMap()
 
     fun <T : Any> optional(
         name: String,
@@ -96,11 +64,13 @@ class Flags private constructor(
         argType: FlagType<T>,
         default: T?
     ): Flag<T, out T?> {
-        val parserValue = _parser.get().option(
-            type = argType,
-            name = name,
-            description = description
-        )
+        val parserValue =
+            parser.get()
+                .option(
+                    type = argType,
+                    name = name,
+                    description = description
+                )
 
         val argValue: AbstractSingleOption<T, out T?, out DefaultRequiredType> = when (default) {
             null ->
@@ -118,7 +88,7 @@ class Flags private constructor(
         )
 
         checkForDuplicate(flag)
-        _flags[flag.name] = flag
+        flags[flag.name] = flag
 
         return flag
     }
@@ -130,7 +100,7 @@ class Flags private constructor(
         default: Collection<T>
     ): Flag<T, List<T>> {
         val argValue =
-            _parser.get()
+            parser.get()
                 .option(
                     type = flagType,
                     name = name,
@@ -147,7 +117,7 @@ class Flags private constructor(
         )
 
         checkForDuplicate(flag)
-        _flags[flag.name] = flag
+        flags[flag.name] = flag
 
         return flag
     }
@@ -157,11 +127,14 @@ class Flags private constructor(
         description: String,
         flagType: FlagType<T>
     ): Flag<T, T> {
-        val parserValue = _parser.get().option(
-            type = flagType,
-            name = name,
-            description = description
-        ).required()
+        val parserValue =
+            parser.get()
+                .option(
+                    type = flagType,
+                    name = name,
+                    description = description
+                )
+                .required()
 
         val flag = Flag(
             name = name,
@@ -171,24 +144,54 @@ class Flags private constructor(
         )
 
         checkForDuplicate(flag)
-        _flags[flag.name] = flag
+        flags[flag.name] = flag
 
         return flag
     }
 
-    fun reset() {
-        this._flags.clear()
-        this._parser.set(newFlagParser())
+    fun parse(args: Array<String>) = when (val result = parseResult(args)) {
+        is FlagParseResult.Ok -> Unit
+        is FlagParseResult.Error ->
+            throw ParsingException(result.reason ?: "")
+    }
+
+    // TODO("consider making this public")
+    internal fun parseResult(args: Array<String>): FlagParseResult = synchronized(lock = this) {
+        val parseResult = when (val result = parser.get().parse(args)) {
+            is FlagParserResult.OK -> {
+                flags.forEach { (_, value) ->
+                    value.register()
+                }
+                FlagParseResult.Ok(emptyList())
+            }
+
+            is FlagParserResult.Error -> {
+                FlagParseResult.Error(result.reason)
+            }
+
+            is FlagParserResult.Help -> {
+                System.err.println(result.usage)
+                FlagParseResult.Ok(emptyList())
+            }
+        }
+
+        return parseResult
+    }
+
+    internal fun reset() {
+        this.flags.clear()
+        this.parser.set(newFlagParser())
     }
 
     private fun newFlagParser(): FlagParser =
         FlagParser(
             programName = name,
-            allowUndefinedFlags = allowUndefinedFlags
+            allowUndefinedFlags = allowUndefinedFlags,
+            includeGlobalFlags = includeGlobalFlags
         )
 
     private fun checkForDuplicate(flag: Flag<*, *>) {
-        if (_flags.containsKey(flag.name)) {
+        if (flags.containsKey(flag.name)) {
             throw DuplicateFlagException(flag.name)
         }
     }

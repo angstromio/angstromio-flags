@@ -3,6 +3,7 @@
 package angstromio.flags.internal
 
 import angstromio.flags.FlagType
+import angstromio.flags.GlobalFlag
 import kotlin.reflect.KProperty
 
 /**
@@ -90,8 +91,13 @@ internal data class FlagTooManyArgumentsException(override val message: String) 
  */
 internal class FlagParser(
     val programName: String,
-    var allowUndefinedFlags: Boolean = false
+    val allowUndefinedFlags: Boolean = false,
+    val includeGlobalFlags: Boolean = true
 ) {
+
+    companion object {
+        private const val UNDEFINED_FLAGS_VARARGS = "UNDEFINED_FLAGS"
+    }
 
     /**
      * Map of options: key - full name of option, value - pair of descriptor and parsed values.
@@ -371,6 +377,11 @@ internal class FlagParser(
      */
     fun parse(args: Array<out String>): FlagParserResult = parse(args.asList())
 
+    private fun getSystemPropertiesAsOptionList(): List<String> =
+        System.getProperties().filter { (key, _) -> GlobalFlag.get(key.toString()) != null }.map { (key, value) ->
+            listOf("-$key", value.toString())
+        }.flatten()
+
     private fun parse(args: List<String>): FlagParserResult {
         check(parsingState == null) { "Parsing of command line options can be called only once." }
 
@@ -385,7 +396,7 @@ internal class FlagParser(
 
         // Add default list with arguments if there can be extra free arguments.
         if (allowUndefinedFlags) {
-            argument(FlagType.String, "").vararg()
+            argument(FlagType.String, UNDEFINED_FLAGS_VARARGS).vararg()
         }
 
         // Clean options and arguments maps.
@@ -403,6 +414,21 @@ internal class FlagParser(
                 options[it] = value
 
             } ?: error("Option was added, but unnamed. Added option under №${index + 1}")
+        }
+
+        if (includeGlobalFlags) {
+            // Map declared globals to maps.
+            GlobalFlag.getAll().forEachIndexed { index, flag ->
+                val value = flag.flagValue.owner.entity?.delegate as ParsingValue<*, *>
+                value.descriptor.name?.let {
+                    // Add option.
+                    if (options.containsKey(it)) {
+                        error("Global flag with name $it was already added.")
+                    }
+                    options[it] = value
+
+                } ?: error("Global flag was added, but unnamed. Added global flag under №${index + 1}")
+            }
         }
 
         declaredArguments.forEachIndexed { index, argument ->
@@ -426,7 +452,12 @@ internal class FlagParser(
 
         val argumentsQueue = ArgumentsQueue(arguments.map { it.value.descriptor as FlagDescriptor<*, *> })
 
-        val argIterator = args.listIterator()
+        val argIterator = if (includeGlobalFlags) {
+            // add system properties
+            (args + getSystemPropertiesAsOptionList()).listIterator()
+        } else {
+            args.listIterator()
+        }
         try {
             while (argIterator.hasNext()) {
                 val arg = argIterator.next()
@@ -463,7 +494,7 @@ internal class FlagParser(
                 if (value.isEmpty()) {
                     value.addDefaultValue()
                 }
-                if (value.valueOrigin != ValueOrigin.SET_BY_USER && value.descriptor.required) {
+                if (value.valueOrigin != ValueOrigin.SET_BY_USER && value.descriptor.required && value.descriptor.name != UNDEFINED_FLAGS_VARARGS) {
                     throw FlagRequiredMissingException("Value for ${value.descriptor.textDescription} should be always provided in command line.")
                 }
             }
