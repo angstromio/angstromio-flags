@@ -129,13 +129,6 @@ class GlobalFlag<T : Any>(
     override val flagType: FlagType<T>,
     private val default: T? = null
 ) : Flag<T, T> {
-    private val registered = AtomicBoolean(/* initialValue = */ false)
-
-    /** Global Flags are registered on creation */
-    init {
-        this.register()
-    }
-
     companion object {
         /* global registry of global flags */
         private val globalFlags: ConcurrentHashMap<String, GlobalFlag<*>> = ConcurrentHashMap()
@@ -155,6 +148,8 @@ class GlobalFlag<T : Any>(
         }
     }
 
+    private val registered = AtomicBoolean(/* initialValue = */ false)
+
     @Volatile
     private var valueFn: () -> T? = {
         when (flagValue.valueOrigin) {
@@ -168,7 +163,13 @@ class GlobalFlag<T : Any>(
     @Suppress("UNCHECKED_CAST")
     override val flagValue: Option<T> = getFlagValue() as Option<T>
     override val hasParameter: Boolean = this.flagType.hasParameter
-    override val hasDefault: Boolean = this.default != null
+    override val hasDefault: Boolean = (this.flagValue.owner.entity?.delegate as ParsingValue<*, *>).descriptor.defaultValue != null
+
+    /** Global Flags are registered and parsed on creation */
+    init {
+        register()
+        setFlagValue()
+    }
 
     override fun getValueFn(): () -> T? = this.valueFn
     override fun setValueFn(fn: () -> T?) {
@@ -192,6 +193,15 @@ class GlobalFlag<T : Any>(
         )
         option.owner.entity = option
         return if (default != null) option.default(default) else option
+    }
+
+    private fun setFlagValue() {
+        val value = flagValue.owner.entity?.delegate as ParsingValue<*, *>
+        val propertyValue = System.getProperty(this.name)
+        if (propertyValue != null) {
+            value.addValue(propertyValue)
+            value.valueOrigin = FlagParser.ValueOrigin.SET_BY_USER
+        } else value.addDefaultValue()
     }
 
     override fun equals(other: Any?): Boolean {

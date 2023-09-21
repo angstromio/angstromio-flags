@@ -282,7 +282,8 @@ internal class FlagParser(
         val name = argumentsQueue.pop()
         name?.let {
             val argumentValue = arguments[name]!!
-//            argumentValue.descriptor.deprecatedWarning?.let { printWarning(it) }
+            // TODO("support deprecations?")
+            // argumentValue.descriptor.deprecatedWarning?.let { printWarning(it) }
             argumentValue.addValue(arg)
             return true
         }
@@ -377,11 +378,6 @@ internal class FlagParser(
      */
     fun parse(args: Array<out String>): FlagParserResult = parse(args.asList())
 
-    private fun getSystemPropertiesAsOptionList(): List<String> =
-        System.getProperties().filter { (key, _) -> GlobalFlag.get(key.toString()) != null }.map { (key, value) ->
-            listOf("-$key", value.toString())
-        }.flatten()
-
     private fun parse(args: List<String>): FlagParserResult {
         check(parsingState == null) { "Parsing of command line options can be called only once." }
 
@@ -416,21 +412,6 @@ internal class FlagParser(
             } ?: error("Option was added, but unnamed. Added option under №${index + 1}")
         }
 
-        if (includeGlobalFlags) {
-            // Map declared globals to maps.
-            GlobalFlag.getAll().forEachIndexed { index, flag ->
-                val value = flag.flagValue.owner.entity?.delegate as ParsingValue<*, *>
-                value.descriptor.name?.let {
-                    // Add option.
-                    if (options.containsKey(it)) {
-                        error("Global flag with name $it was already added.")
-                    }
-                    options[it] = value
-
-                } ?: error("Global flag was added, but unnamed. Added global flag under №${index + 1}")
-            }
-        }
-
         declaredArguments.forEachIndexed { index, argument ->
             val value = argument.entity?.delegate as ParsingValue<*, *>
             value.descriptor.name?.let {
@@ -452,12 +433,7 @@ internal class FlagParser(
 
         val argumentsQueue = ArgumentsQueue(arguments.map { it.value.descriptor as FlagDescriptor<*, *> })
 
-        val argIterator = if (includeGlobalFlags) {
-            // add system properties
-            (args + getSystemPropertiesAsOptionList()).listIterator()
-        } else {
-            args.listIterator()
-        }
+        val argIterator = args.listIterator()
         try {
             while (argIterator.hasNext()) {
                 val arg = argIterator.next()
@@ -511,7 +487,7 @@ internal class FlagParser(
      */
     private fun makeUsage(): String {
         val result = StringBuilder()
-        result.append("Usage: ${fullCommandName.joinToString(" ")} options_list\n")
+        result.append("Usage: ${fullCommandName.joinToString(" ")} -option1 value1 -option2\n")
         if (arguments.isNotEmpty()) {
             result.append("Arguments: \n")
             arguments.forEach {
@@ -522,6 +498,12 @@ internal class FlagParser(
             result.append("Options: \n")
             options.forEach {
                 result.append(it.value.descriptor.helpMessage)
+            }
+            if (includeGlobalFlags) {
+                GlobalFlag.getAll().forEach { flag ->
+                    val value = flag.flagValue.owner.entity?.delegate as ParsingValue<*, *>
+                    result.append(value.descriptor.helpMessage)
+                }
             }
         }
         return result.toString()

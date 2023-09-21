@@ -35,8 +35,7 @@ class GlobalFlagsTest : FunSpec() {
                 default = 4
             )
 
-            myGlobalFlag.value() should beNull() // not parsed until flags are parsed
-
+            myGlobalFlag.value() shouldNot beNull() // parsed when created
 
             GlobalFlag.getAll().size shouldBeEqual 1
             GlobalFlag.get(globalFlagSystemPropertyName) should be(myGlobalFlag)
@@ -48,7 +47,7 @@ class GlobalFlagsTest : FunSpec() {
                 default = true
             )
 
-            myOtherGlobalFlag.value() should beNull()  // not parsed until flags are parsed
+            myOtherGlobalFlag.value() shouldNot beNull() // parsed when created
 
             GlobalFlag.getAll().size shouldBeEqual 2
             GlobalFlag.get("globalflagstest.notSet") should be(myOtherGlobalFlag)
