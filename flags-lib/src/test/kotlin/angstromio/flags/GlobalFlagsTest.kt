@@ -70,6 +70,33 @@ class GlobalFlagsTest : FunSpec() {
             myOtherGlobalFlag.value() should be(true)
         }
 
+        test("GlobalFlag without default") {
+            System.setProperty(globalFlagSystemPropertyName, "99")
+
+            val myOtherGlobalFlag = GlobalFlag<Boolean>(
+                name = "globalflagstest.notSet",
+                description = "This isn't set as a system property so will get the default",
+                flagType = FlagType.Boolean
+            )
+
+            myOtherGlobalFlag.value() should beNull() // parsed when created and no default
+            // flag is still registered
+            GlobalFlag.getAll().size shouldBeEqual 1
+            GlobalFlag.get("globalflagstest.notSet") should be(myOtherGlobalFlag)
+
+            val myGlobalFlag = GlobalFlag<Int>(
+                name = globalFlagSystemPropertyName,
+                description = "Test GlobalFlag",
+                flagType = FlagType.Int
+            )
+
+            GlobalFlag.getAll().size shouldBeEqual 2
+            GlobalFlag.get(globalFlagSystemPropertyName) should be(myGlobalFlag)
+
+            myGlobalFlag.value() shouldNot beNull()
+            myGlobalFlag.value() should be(99)
+        }
+
         test("GlobalFlag#help") {
             System.setProperty(globalFlagSystemPropertyName, "99")
 
