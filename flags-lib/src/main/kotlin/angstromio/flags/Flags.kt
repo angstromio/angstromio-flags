@@ -27,17 +27,17 @@ class Flags private constructor(
     sealed interface FlagParseResult {
         /**
          * Indicates successful flag parsing.
-         *
-         * @param remainder A remainder list of un-parsed arguments.
+         * @param message Optional text [String]
          */
-        data class Ok(val remainder: List<String>) : FlagParseResult
+        data class Ok(val message: String? = null) : FlagParseResult
 
         /**
          * Indicates that an error occurred during flag-parsing.
          *
          * @param reason A string explaining the error that occurred.
+         * @param cause If the error is due to an exception, the [Throwable] cause.
          */
-        data class Error(val reason: String?) : FlagParseResult {
+        data class Error(val reason: String?, val cause: Throwable?) : FlagParseResult {
             override fun toString(): String = reason ?: ""
         }
     }
@@ -152,7 +152,7 @@ class Flags private constructor(
     fun parse(args: Array<String>) = when (val result = parseResult(args)) {
         is FlagParseResult.Ok -> Unit
         is FlagParseResult.Error ->
-            throw ParsingException(result.reason ?: "")
+            throw ParsingException(result.reason ?: "", result.cause)
     }
 
     // TODO("consider making this public")
@@ -162,16 +162,16 @@ class Flags private constructor(
                 flags.forEach { (_, value) ->
                     value.register()
                 }
-                FlagParseResult.Ok(emptyList())
+                FlagParseResult.Ok()
             }
 
             is FlagParserResult.Error -> {
-                FlagParseResult.Error(result.reason)
+                FlagParseResult.Error(result.reason, result.cause)
             }
 
             is FlagParserResult.Help -> {
                 System.err.println(result.usage)
-                FlagParseResult.Ok(emptyList())
+                FlagParseResult.Ok(result.usage)
             }
         }
 

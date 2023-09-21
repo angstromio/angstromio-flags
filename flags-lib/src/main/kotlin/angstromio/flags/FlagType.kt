@@ -162,4 +162,6 @@ abstract class FlagType<T : Any>(val hasParameter: kotlin.Boolean) {
     }
 }
 
-class ParsingException(message: String) : Exception(message)
+class ParsingException(message: String, cause: Throwable?) : Exception(message, cause) {
+    constructor(message: String) : this(message, null)
+}

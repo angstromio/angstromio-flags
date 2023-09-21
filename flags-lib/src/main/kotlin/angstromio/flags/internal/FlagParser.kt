@@ -73,7 +73,7 @@ interface FlagValueDelegate<T> {
 internal sealed class FlagParserResult(open val commandName: String) {
     data class Help(override val commandName: String, val usage: String) : FlagParserResult(commandName)
     data class OK(override val commandName: String) : FlagParserResult(commandName)
-    data class Error(override val commandName: String, val reason: String?) : FlagParserResult(commandName)
+    data class Error(override val commandName: String, val reason: String?, val cause: Throwable?) : FlagParserResult(commandName)
 }
 
 internal data class FlagParserHelpException(val usage: String) : Exception(usage)
@@ -477,7 +477,7 @@ internal class FlagParser(
 
             parsingState = FlagParserResult.OK(programName)
         } catch (exception: Exception) {
-            parsingState = FlagParserResult.Error(programName, exception.message)
+            parsingState = FlagParserResult.Error(programName, exception.message, exception)
         }
         return parsingState!!
     }
