@@ -44,16 +44,3 @@ jobs:
         uses: gradle/gradle-build-action@bd5760595778326ba7f1441bcf7e88b49de61a25 # v2.6.0
         with:
           arguments: -Ppublish -PSonatypeUsername=${{ secrets.SONATYPE_USERNAME }} -PSonatypePassword=${{ secrets.SONATYPE_PASSWORD }} clean publish --no-daemon
-      - name: Generate a token
-        id: generate_token
-        uses: actions/create-github-app-token@9d97a4282b2c51a2f4f0465b9326399f53c890d4 # v1.5.0
-        with:
-          app_id: ${{ secrets.API_ACCESS_APP_ID }}
-          private_key: ${{ secrets.API_ACCESS_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: "angstromio-json"
-      - name: Trigger angstromio/angstromio-json Publish
-        env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-        run: |
-          gh workflow run publish.yml --ref main --repo angstromio/angstromio-json
