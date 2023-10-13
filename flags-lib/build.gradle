@@ -22,7 +22,7 @@ plugins {
 
 description = 'JVM application Flags built on angstromio-cli kotlinx extensions.'
 group 'io.angstrom'
-version '0.0.1-SNAPSHOT'
+version project['io.angstrom.version']
 
 // Apply a specific Java toolchain to ease working on different environments.
 // Can set a toolchain via the java extension, and Kotlin compilation tasks will use it,
@@ -82,7 +82,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.angstrom:angstromio-util:0.0.1-SNAPSHOT'
+    implementation "io.angstrom:angstromio-util:${project['io.angstrom.version']}"
     implementation 'io.arrow-kt:arrow-core:1.2.0'
 
     // Use Kotest Kotlin testing integration.
